@@ -1,13 +1,6 @@
 // a javascript mini-library for making chat completion requests to an LLM provider
 
 //
-// constants
-//
-
-const OPENAI_MODEL = 'gpt-4o';
-const ANTHROPIC_MODEL = 'claude-3-5-sonnet-latest';
-
-//
 // authorization
 //
 
@@ -81,29 +74,43 @@ const DEFAULT_PROVIDER = {
 const providers = {
     local: {
         url: port => `http://localhost:${port}/v1/chat/completions`,
+        port: 8000,
     },
     openai: {
-        url: _ => 'https://api.openai.com/v1/chat/completions',
+        url: 'https://api.openai.com/v1/chat/completions',
         authorize: authorize_openai,
-        model: { model: OPENAI_MODEL },
+        model: 'gpt-4o',
         max_tokens_name: 'max_completion_tokens',
     },
     anthropic: {
-        url: _ => 'https://api.anthropic.com/v1/messages',
+        url: 'https://api.anthropic.com/v1/messages',
         authorize: authorize_anthropic,
         payload: payload_anthropic,
         response: extractor_anthropic,
-        model: { model: ANTHROPIC_MODEL },
+        model: 'claude-3-5-sonnet-latest',
         extra: {
             'anthropic-version': '2023-06-01',
             'anthropic-beta': 'prompt-caching-2024-07-31',
             'anthropic-dangerous-direct-browser-access': 'true',
         },
     },
+    fireworks: {
+        url: 'https://api.fireworks.ai/inference/v1/chat/completions',
+        model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
+    },
+    groq: {
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'llama-3.1-70b-versatile',
+    },
 };
 
-function get_provider(provider) {
-    return { ...DEFAULT_PROVIDER, ...providers[provider] };
+function get_provider(provider, args) {
+    args = args ?? {};
+    return { ...DEFAULT_PROVIDER, ...providers[provider], ...args };
+}
+
+function host_url(url, port) {
+    return (typeof url === 'function') ? url(port) : url;
 }
 
 //
@@ -111,25 +118,23 @@ function get_provider(provider) {
 //
 
 async function reply(query, args) {
-    let { provider, system, history, prefill, apiKey, max_tokens, port } = args ?? {};
-    apiKey = apiKey ?? get_api_key(provider);
+    let { provider, system, history, prefill, max_tokens, api_key, ...args } = args ?? {};
     max_tokens = max_tokens ?? 1024;
-    port = port ?? 8000;
 
     // get provider settings
-    provider = get_provider(provider ?? 'local');
+    provider = get_provider(provider ?? 'local', args);
+    const url = host_url(provider.url, provider.port);
 
     // check authorization
-    if (provider.authorize != null && apiKey == null) {
+    if (provider.authorize != null && api_key == null) {
         throw new Error('API key is required');
     }
 
     // get request params
-    const url = provider.url(port);
     const extra = provider.extra ?? {};
-    const model = provider.model ?? {};
+    const model = provider.model ? { model: provider.model } : {};
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
-    const authorize = provider.authorize ? provider.authorize(apiKey) : {};
+    const authorize = provider.authorize ? provider.authorize(api_key) : {};
     const message = provider.payload(query, { system, history, prefill });
 
     // prepare request

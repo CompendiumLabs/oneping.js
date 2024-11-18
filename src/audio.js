@@ -126,7 +126,7 @@ const LOCAL_URL = 'http://localhost:8000/inference';
 
 // audio should be a Blob object
 async function transcribe(audio, args) {
-    let { url, apiKey, model, ...extra } = args ?? {};
+    let { url, model, api_key, ...extra } = args ?? {};
     url = url ?? LOCAL_URL;
 
     // baseline headers and payload
@@ -138,15 +138,22 @@ async function transcribe(audio, args) {
     }
 
     // going proprietary
-    if (apiKey != null) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
+    if (api_key != null) {
+        headers['Authorization'] = `Bearer ${api_key}`;
         body.append('model', model ?? DEFAULT_MODEL);
     }
 
     // make request and return text
     const response = await fetch(url, { method: 'POST', headers, body });
     const data = await response.json();
-    return data.text ?? data.error;
+
+    // check for error
+    if (data.error != null) {
+        console.error(JSON.stringify(data.error));
+    }
+
+    // return text
+    return data.text;
 }
 
 export { AudioRecorder, waitUntil, waitThen, transcribe, OPENAI_URL, LOCAL_URL };
