@@ -82,7 +82,8 @@ const url_input = control.querySelector('#url-input');
 const url_button = control.querySelector('#url-button');
 
 // create api key widget
-const widget = new ApiKeyWidget('openai', api_input, api_button);
+const widget = new ApiKeyWidget(api_input, api_button);
+widget.set_provider('openai');
 
 // set url from storage
 const url_initial = localStorage.getItem('whisper-url');

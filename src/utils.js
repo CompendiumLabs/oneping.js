@@ -25,11 +25,10 @@ function clear_api_key(provider) {
 //
 
 class ApiKeyWidget {
-    constructor(provider, input, button) {
-        this.provider = provider;
+    constructor(input, button) {
         this.input = input;
         this.button = button;
-        this.set_provider(provider);
+        this.set_provider(null);
         this.connect_handlers();
     }
 

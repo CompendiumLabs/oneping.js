@@ -46,10 +46,6 @@ function get_provider() {
     return localStorage.getItem('chat-provider');
 }
 
-function set_provider(provider) {
-    localStorage.setItem('chat-provider', provider);
-}
-
 function is_valid_provider(provider) {
     return PROVIDERS.includes(provider);
 }
@@ -59,6 +55,17 @@ function set_valid_provider(valid) {
     prov_button.textContent = valid ? '✓' : '✗';
     prov_button.classList.toggle('text-green-500', valid);
     prov_button.classList.toggle('text-red-500', !valid);
+}
+
+function set_provider(provider) {
+    localStorage.setItem('chat-provider', provider);
+    if (is_valid_provider(provider)) {
+        set_valid_provider(true);
+        widget.set_provider(provider);
+    } else {
+        set_valid_provider(false);
+        widget.set_provider(null);
+    }
 }
 
 // get query arguments
@@ -109,33 +116,20 @@ document.addEventListener('keydown', (event) => {
 // handle provider input
 prov_input.addEventListener('input', () => {
     const provider = prov_input.value;
-    localStorage.setItem('chat-provider', provider);
-    if (is_valid_provider(provider)) {
-        set_valid_provider(true);
-        widget.set_provider(provider);
-    } else {
-        set_valid_provider(false);
-        widget.set_provider(null);
-    }
+    set_provider(provider);
 });
 
 //
 // configuration
 //
 
-// get and validate provider
-let provider = get_provider() ?? 'anthropic';
-if (!is_valid_provider(provider)) {
-    provider = 'anthropic';
-    set_provider(provider);
-}
+// get stored provider
+const provider = get_provider() ?? 'anthropic';
+const widget = new ApiKeyWidget(key_input, key_button);
 
-// set provider text
+// apply to control ui
 prov_input.value = provider;
-set_valid_provider(true);
-
-// create api key widget
-const widget = new ApiKeyWidget(provider, key_input, key_button);
+set_provider(provider);
 
 //
 // main
