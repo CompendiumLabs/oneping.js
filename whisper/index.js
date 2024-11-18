@@ -1,7 +1,7 @@
 // whisper
 
 import { AudioRecorder, transcribe, OPENAI_URL, LOCAL_URL } from '../src/audio.js';
-import { api_key_widget, get_api_key, h } from '../src/utils.js';
+import { ApiKeyWidget, h } from '../src/utils.js';
 
 // init objects
 const recorder = new AudioRecorder();
@@ -28,7 +28,7 @@ function makeMessage(timestamp, text) {
 // get transcription arguments
 function get_trans_args() {
     const url = localStorage.getItem('whisper-url');
-    const api_key = get_api_key('openai');
+    const api_key = widget.get_api_key();
     return { url, api_key };
 }
 
@@ -48,7 +48,8 @@ document.addEventListener('keydown', async (event) => {
         if (audio != null) {
             // transcribe audio
             circle.classList.add('transcribing');
-            const text = await transcribe(audio, get_trans_args());
+            const args = get_trans_args();
+            const text = await transcribe(audio, args);
             console.log(`transcribe: ${text}`);
             circle.classList.remove('transcribing');
 
@@ -80,8 +81,8 @@ const api_button = control.querySelector('#key-button');
 const url_input = control.querySelector('#url-input');
 const url_button = control.querySelector('#url-button');
 
-// connect apikey widget
-api_key_widget('openai', api_input, api_button);
+// create api key widget
+const widget = new ApiKeyWidget('openai', api_input, api_button);
 
 // set url from storage
 const url_initial = localStorage.getItem('whisper-url');

@@ -8,6 +8,10 @@ function get_api_key(provider) {
     return localStorage.getItem(`${provider}-api-key`);
 }
 
+function has_api_key(provider) {
+    return get_api_key(provider) != null;
+}
+
 function set_api_key(provider, api_key) {
     localStorage.setItem(`${provider}-api-key`, api_key);
 }
@@ -20,41 +24,71 @@ function clear_api_key(provider) {
 // api key widget
 //
 
-function mask_api_key(api_key) {
-    return '*'.repeat(api_key.length);
-}
-
-function api_key_widget(provider, input, button) {
-    // state variable
-    let api_key = get_api_key(provider);
-    let is_set = api_key != null;
-
-    // set initial button text
-    if (is_set) {
-        button.textContent = 'Clear';
-        input.value = mask_api_key(api_key);
-        input.disabled = true;
+class ApiKeyWidget {
+    constructor(provider, input, button) {
+        this.provider = provider;
+        this.input = input;
+        this.button = button;
+        this.set_provider(provider);
+        this.connect_handlers();
     }
 
-    // click handler
-    button.addEventListener('click', (event) => {
-        if (is_set) {
-            clear_api_key(provider);
-            is_set = false;
-            input.value = '';
-            input.disabled = false;
-            button.textContent = 'Store';
-        } else {
-            const value = input.value;
-            if (value.length > 0) {
-                set_api_key(provider, value);
-                is_set = true;
-                input.value = mask_api_key(value);
-                input.disabled = true;
-                button.textContent = 'Clear';
+    // set provider and update state
+    set_provider(provider) {
+        this.provider = provider;
+        this.is_valid = provider != null;
+        this.is_set = this.is_valid && has_api_key(provider);
+        this.update_state();
+    }
+
+    get_api_key() {
+        return get_api_key(this.provider);
+    }
+
+    // get masked api key
+    masked_api_key() {
+        const api_key = this.get_api_key();
+        return '*'.repeat(api_key.length);
+    }
+
+    // set input/button state
+    update_state() {
+        if (this.is_valid) {
+            if (this.is_set) {
+                this.button.textContent = 'Clear';
+                this.button.disabled = false;
+                this.input.value = this.masked_api_key();
+                this.input.disabled = true;
+            } else {
+                this.button.textContent = 'Store';
+                this.button.disabled = false;
+                this.input.value = '';
+                this.input.disabled = false;
             }
+        } else {
+            this.button.textContent = '';
+            this.button.disabled = true;
+            this.input.value = '';
+            this.input.disabled = true;
         }
-    });
+    }
+
+    // button click handler
+    connect_handlers() {
+        this.button.addEventListener('click', (event) => {
+            if (this.is_set) {
+                clear_api_key(this.provider);
+                this.is_set = false;
+            } else {
+                const value = this.input.value;
+                if (value.length > 0) {
+                    set_api_key(this.provider, value);
+                    this.is_set = true;
+                }
+            }
+            this.update_state();
+        });
+    }
 }
 
 //
@@ -85,9 +119,13 @@ function h(tag, args, children) {
     }
 
     // add children
-    children = Array.isArray(children) ? children : [children];
-    for (const child of children) {
-        elem.append(child);
+    if (typeof children === 'string') {
+        elem.innerHTML = children;
+    } else {
+        children = Array.isArray(children) ? children : [children];
+        for (const child of children) {
+            elem.append(child);
+        }
     }
 
     // return element
@@ -98,4 +136,4 @@ function h(tag, args, children) {
 // exports
 //
 
-export { get_api_key, set_api_key, clear_api_key, api_key_widget, h };
+export { get_api_key, set_api_key, clear_api_key, ApiKeyWidget, h };

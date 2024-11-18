@@ -103,6 +103,7 @@ const providers = {
         model: 'llama-3.1-70b-versatile',
     },
 };
+const PROVIDERS = Object.keys(providers);
 
 function get_provider(provider, args) {
     args = args ?? {};
@@ -118,11 +119,11 @@ function host_url(url, port) {
 //
 
 async function reply(query, args) {
-    let { provider, system, history, prefill, max_tokens, api_key, ...args } = args ?? {};
+    let { provider, system, history, prefill, max_tokens, api_key, ...pargs } = args ?? {};
     max_tokens = max_tokens ?? 1024;
 
     // get provider settings
-    provider = get_provider(provider ?? 'local', args);
+    provider = get_provider(provider ?? 'local', pargs);
     const url = host_url(provider.url, provider.port);
 
     // check authorization
@@ -157,4 +158,4 @@ async function reply(query, args) {
 // exports
 //
 
-export { reply };
+export { reply, PROVIDERS };

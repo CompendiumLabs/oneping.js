@@ -1,82 +1,40 @@
 /* chat interface */
 
-#api-key-widget {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 400px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 10px;
+.small-caps {
+    font-variant: small-caps;
 }
 
-#api-key-widget input {
-    font-family: monospace;
-    font-size: 18px;
+/*
+ * markdown
+ */
+
+.message-content ol {
+    list-style-type: decimal;
+    padding-left: 40px;
 }
 
-#api-key-widget button {
-    font-family: sans-serif;
-    font-size: 18px;
-    border: 1px solid #aaa;
-    border-radius: 2px;
+.message-content ul {
+    list-style-type: disc;
+    padding-left: 40px;
 }
 
-#api-key-widget input {
-    border: none;
-    outline: none;
+.message-content pre {
+    background-color: white;
+    border: 1px solid #ddd;
+    line-height: 1.2;
 }
 
-#chat {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    overflow-y: scroll;
-    padding: 10px 0px;
-    font-family: sans-serif;
+.message-content code {
+    font-family: 'SourceCodePro', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    margin: 0 !important;
 }
 
-.message-box {
+.message-content *:not(:last-child) {
+    margin-bottom: 10px;
+}
+
+.message-content pre > code {
     position: relative;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 10px;
-    background-color: rgb(243 244 246);
-}
-
-.message-role {
-    position: absolute;
-    top: -10px;
-    left: 10px;
-    height: 15px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background-color: #fff;
-    font-weight: bold;
-    padding: 2px 4px;
-}
-
-.message-role span {
-    position: relative;
-    top: -6px;
-    font-size: 14px;
-}
-
-.message-content {
-    padding-top: 5px;
-}
-
-#query {
-    box-sizing: border-box;
-    outline: none;
-    border: none;
-    resize: none;
-    width: 100%;
-    height: 50px;
-    background-color: inherit;
-    font-family: sans-serif;
-}
-
-.message-system {
-    font-style: italic;
 }
