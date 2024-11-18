@@ -1,6 +1,6 @@
 // client-side chat interface
 
-import { reply, PROVIDERS } from '../src/curl.js';
+import { Chat, PROVIDERS } from '../src/curl.js';
 import { ApiKeyWidget, get_api_key, h } from '../src/utils.js';
 
 //
@@ -13,7 +13,7 @@ const system = 'You are a helpful assistant that loves to use emojis.';
 // ui elements
 //
 
-const chat = document.querySelector('#chat');
+const chat_box = document.querySelector('#chat-box');
 const query_box = document.querySelector('#query-box');
 const query = document.querySelector('#query');
 const control = document.querySelector('#control');
@@ -83,18 +83,19 @@ query.addEventListener('keypress', async (event) => {
         // add user query message
         const query_value = query.value;
         const sent = make_message('user', query_value);
-        chat.insertBefore(sent, query_box);
+        chat_box.insertBefore(sent, query_box);
         query.value = '';
 
         // get response and add to chat
         const args = get_query_args();
-        const response = await reply(query_value, args);
+        const response = await chat.reply(query_value, args);
         const markdown = await md.marked(response);
         const message = make_message('assistant', markdown);
-        chat.insertBefore(message, query_box);
+        chat_box.insertBefore(message, query_box);
 
         // show query box
         query_box.classList.remove('hidden');
+        query.focus();
     }
 });
 
@@ -140,9 +141,12 @@ const widget = new ApiKeyWidget(provider, key_input, key_button);
 // main
 //
 
+// make chatterbox
+const chat = new Chat(system);
+
 // prepend system message
 const system_box = make_message('system', system, true);
-chat.insertBefore(system_box, query_box);
+chat_box.insertBefore(system_box, query_box);
 
 // set focus
 query.focus();

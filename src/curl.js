@@ -154,8 +154,25 @@ async function reply(query, args) {
     return provider.response(data);
 }
 
+class Chat {
+    constructor(system, args) {
+        this.system = system;
+        this.args = args ?? {};
+        this.history = [];
+    }
+
+    async reply(query, args) {
+        const text = await reply(query, {
+            system: this.system, history: this.history, ...this.args, ...args
+        });
+        this.history.push({ role: 'user', content: query });
+        this.history.push({ role: 'assistant', content: text });
+        return text;
+    }
+}
+
 //
 // exports
 //
 
-export { reply, PROVIDERS };
+export { reply, Chat, PROVIDERS };
