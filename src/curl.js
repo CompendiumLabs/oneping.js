@@ -148,9 +148,14 @@ async function reply(query, args) {
         headers: headers,
         body: JSON.stringify(payload),
     });
+    const data = await response.json();
+
+    // check status
+    if (!response.ok) {
+        throw new Error(`Status ${response.status}: ${data.error.message}`);
+    }
 
     // return json data
-    const data = await response.json();
     return provider.response(data);
 }
 
