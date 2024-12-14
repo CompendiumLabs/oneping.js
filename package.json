@@ -1,0 +1,20 @@
+{
+  "name": "oneping",
+  "version": "1.0.0",
+  "description": "Query LLMs and Whisper straight from the web.",
+  "type": "module",
+  "author": "Doug Hanley",
+  "license": "MIT",
+  "files": [
+    "src/curl.js",
+    "src/utils.js",
+    "src/audio.js",
+    "src/index.js"
+  ],
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "oneping": "file:oneping-1.0.0.tgz"
+  }
+}
