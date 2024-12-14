@@ -13,8 +13,5 @@
   ],
   "exports": {
     ".": "./src/index.js"
-  },
-  "dependencies": {
-    "oneping": "file:oneping-1.0.0.tgz"
   }
 }
