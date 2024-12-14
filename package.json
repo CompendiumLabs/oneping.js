@@ -1,6 +1,6 @@
 {
   "name": "oneping",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Query LLMs and Whisper straight from the web.",
   "type": "module",
   "author": "Doug Hanley",
