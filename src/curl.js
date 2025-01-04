@@ -62,6 +62,21 @@ function extractor_anthropic(response) {
     return response.content[0].text;
 }
 
+function* stream_anthropic(chunk) {
+    for (const block of chunk.split('\n\n')) {
+        if (block.length == 0) continue;
+        const [line1, line2] = block.split('\n')
+        const [name1, event] = /^event: (.*)$/.exec(line1)
+        const [name2, data0] = /^data: (.*)$/.exec(line2)
+        const data = JSON.parse(data0);
+        if (event == 'content_block_start') {
+            yield data.content_block.text;
+        } else if (event == 'content_block_delta') {
+            yield data.delta.text;
+        }
+    }
+}
+
 //
 // providers
 //
@@ -87,6 +102,7 @@ const providers = {
         authorize: authorize_anthropic,
         payload: payload_anthropic,
         response: extractor_anthropic,
+        stream: stream_anthropic,
         model: 'claude-3-5-sonnet-latest',
         extra: {
             'anthropic-version': '2023-06-01',
@@ -105,9 +121,8 @@ const providers = {
 };
 const PROVIDERS = Object.keys(providers);
 
-function get_provider(provider, args) {
-    args = args ?? {};
-    return { ...DEFAULT_PROVIDER, ...providers[provider], ...args };
+function get_provider(provider) {
+    return { ...DEFAULT_PROVIDER, ...providers[provider] };
 }
 
 function host_url(url, port) {
@@ -118,12 +133,12 @@ function host_url(url, port) {
 // reply
 //
 
-async function reply(query, args) {
-    let { provider, system, history, prefill, max_tokens, api_key, ...pargs } = args ?? {};
+function prepare_request(query, provider, args) {
+    let { system, history, prefill, max_tokens, api_key, stream } = args ?? {};
     max_tokens = max_tokens ?? 1024;
+    stream = stream ?? false;
 
-    // get provider settings
-    provider = get_provider(provider ?? 'local', pargs);
+    // get request url
     const url = host_url(provider.url, provider.port);
 
     // check authorization
@@ -140,7 +155,18 @@ async function reply(query, args) {
 
     // prepare request
     const headers = { 'Content-Type': 'application/json', ...authorize, ...extra };
-    const payload = { ...message, ...model, [max_tokens_name]: max_tokens };
+    const payload = { ...message, ...model, stream, [max_tokens_name]: max_tokens };
+
+    // relevant parameters
+    return { url, headers, payload };
+}
+
+async function reply(query, args0) {
+    const { provider, ...args } = args0 ?? {};
+
+    // get provider settings
+    const prov = get_provider(provider ?? 'local');
+    const { url, headers, payload } = prepare_request(query, prov, args);
 
     // make request
     const response = await fetch(url, {
@@ -156,7 +182,47 @@ async function reply(query, args) {
     }
 
     // return json data
-    return provider.response(data);
+    return prov.response(data);
+}
+
+//
+// streaming
+//
+
+async function* stream(query, args0) {
+    const { provider, ...args } = args0 ?? {};
+
+    // prepare request
+    const prov = get_provider(provider ?? 'local');
+    const args1 = { ...args, stream: true };
+    const { url, headers, payload } = prepare_request(query, prov, args1);
+
+    // make stream parser
+    const transform = (chunk, controller) => {
+        for (const data of prov.stream(chunk)) {
+            controller.enqueue(data);
+        }
+    }
+
+    // make request
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload),
+    });
+
+    // check status
+    if (!response.ok) {
+        throw new Error(`Status ${response.status}: ${data.error.message}`);
+    }
+
+    // stream decode and parse
+    const stream = response.body
+        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(new TransformStream({ transform }));
+
+    // yield chunks
+    yield* stream;
 }
 
 class Chat {
@@ -174,10 +240,23 @@ class Chat {
         this.history.push({ role: 'assistant', content: text });
         return text;
     }
+
+    async* stream(query, args) {
+        let reply = '';
+        const response = stream(query, {
+            system: this.system, history: this.history, ...this.args, ...args
+        });
+        for await (const chunk of response) {
+            reply += chunk;
+            yield chunk;
+        }
+        this.history.push({ role: 'user', content: query });
+        this.history.push({ role: 'assistant', content: reply });
+    }
 }
 
 //
 // exports
 //
 
-export { reply, Chat, PROVIDERS };
+export { reply, stream, Chat, PROVIDERS };

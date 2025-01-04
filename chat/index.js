@@ -93,12 +93,21 @@ query.addEventListener('keypress', async (event) => {
         chat_box.insertBefore(sent, query_box);
         query.value = '';
 
+        // add assistant response
+        const reply = make_message('assistant', '');
+        chat_box.insertBefore(reply, query_box);
+
+        // set up reply box
+        const reply_box = reply.querySelector('.message-content');
+        let text = '';
+
         // get response and add to chat
         const args = get_query_args();
-        const response = await chat.reply(query_value, args);
-        const markdown = await md.marked(response);
-        const message = make_message('assistant', markdown);
-        chat_box.insertBefore(message, query_box);
+        const response = chat.stream(query_value, args);
+        for await (const chunk of response) {
+            text += chunk;
+            reply_box.innerHTML = await md.marked(text);
+        }
 
         // show query box
         query_box.classList.remove('hidden');
