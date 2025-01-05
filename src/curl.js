@@ -62,12 +62,22 @@ function extractor_anthropic(response) {
     return response.content[0].text;
 }
 
+function* stream_openai(response) {
+    for (const block of response.split('\n\n')) {
+        if (block.length == 0) continue;
+        const [match, data0] = /^data: (.*)$/.exec(block)
+        if (data0 == '[DONE]') break;
+        const data = JSON.parse(data0);
+        yield data.choices[0].delta.content;
+    }
+}
+
 function* stream_anthropic(chunk) {
     for (const block of chunk.split('\n\n')) {
         if (block.length == 0) continue;
         const [line1, line2] = block.split('\n')
-        const [name1, event] = /^event: (.*)$/.exec(line1)
-        const [name2, data0] = /^data: (.*)$/.exec(line2)
+        const [match1, event] = /^event: (.*)$/.exec(line1)
+        const [match2, data0] = /^data: (.*)$/.exec(line2)
         const data = JSON.parse(data0);
         if (event == 'content_block_start') {
             yield data.content_block.text;
@@ -84,6 +94,7 @@ function* stream_anthropic(chunk) {
 const DEFAULT_PROVIDER = {
     payload: payload_openai,
     response: extractor_openai,
+    stream: stream_openai,
 }
 
 const providers = {
