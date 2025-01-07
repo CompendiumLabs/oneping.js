@@ -173,12 +173,13 @@ function prepare_request(query, args) {
     const body = provider.body ?? {};
     const model = provider.model ? { model: provider.model } : {};
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
+    const toks = (max_tokens != null) ? { [max_tokens_name]: max_tokens } : {};
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
     const message = provider.payload(query, { system, history, prefill });
 
     // prepare request
     const headers = { 'Content-Type': 'application/json', ...authorize, ...head };
-    const payload = { ...message, ...model, stream, [max_tokens_name]: max_tokens, ...body };
+    const payload = { ...message, ...model, ...toks, stream, ...body };
 
     // relevant parameters
     return { provider, url, headers, payload };
@@ -230,6 +231,7 @@ async function* stream(query, args) {
 
     // check status
     if (!response.ok) {
+        const data = await response.json();
         throw new Error(`Status ${response.status}: ${data.error.message}`);
     }
 
