@@ -1,5 +1,16 @@
 // a javascript mini-library for making chat completion requests to an LLM provider
 
+// general utilities
+
+function robustParse(json) {
+    try {
+        return JSON.parse(json);
+    } catch (e) {
+        console.error(e);
+        return null;
+    }
+}
+
 //
 // authorization
 //
@@ -67,7 +78,8 @@ function* stream_openai(response) {
         if (block.length == 0) continue;
         const [match, data0] = /^data: (.*)$/.exec(block)
         if (data0 == '[DONE]') break;
-        const data = JSON.parse(data0);
+        const data = robustParse(data0);
+        if (data == null) continue;
         const text = data.choices[0].delta.content;
         if (text != null) yield text;
     }
@@ -79,7 +91,8 @@ function* stream_anthropic(chunk) {
         const [line1, line2] = block.split('\n')
         const [match1, event] = /^event: (.*)$/.exec(line1)
         const [match2, data0] = /^data: (.*)$/.exec(line2)
-        const data = JSON.parse(data0);
+        const data = robustParse(data0);
+        if (data == null) continue;
         if (event == 'content_block_start') {
             yield data.content_block.text;
         } else if (event == 'content_block_delta') {
