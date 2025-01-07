@@ -68,7 +68,8 @@ function* stream_openai(response) {
         const [match, data0] = /^data: (.*)$/.exec(block)
         if (data0 == '[DONE]') break;
         const data = JSON.parse(data0);
-        yield data.choices[0].delta.content;
+        const text = data.choices[0].delta.content;
+        if (text != null) yield text;
     }
 }
 
@@ -115,7 +116,7 @@ const providers = {
         response: extractor_anthropic,
         stream: stream_anthropic,
         model: 'claude-3-5-sonnet-latest',
-        extra: {
+        headers: {
             'anthropic-version': '2023-06-01',
             'anthropic-beta': 'prompt-caching-2024-07-31',
             'anthropic-dangerous-direct-browser-access': 'true',
@@ -123,17 +124,25 @@ const providers = {
     },
     fireworks: {
         url: 'https://api.fireworks.ai/inference/v1/chat/completions',
+        authorize: authorize_openai,
         model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
     },
     groq: {
         url: 'https://api.groq.com/openai/v1/chat/completions',
+        authorize: authorize_openai,
         model: 'llama-3.1-70b-versatile',
+    },
+    deepseek: {
+        url: 'https://api.deepseek.com/chat/completions',
+        authorize: authorize_openai,
+        model: 'deepseek-chat',
     },
 };
 const PROVIDERS = Object.keys(providers);
 
-function get_provider(provider) {
-    return { ...DEFAULT_PROVIDER, ...providers[provider] };
+function get_provider(provider, args) {
+    const pdata = provider ? providers[provider] : {};
+    return { ...DEFAULT_PROVIDER, ...pdata, ...args };
 }
 
 function host_url(url, port) {
@@ -144,12 +153,14 @@ function host_url(url, port) {
 // reply
 //
 
-function prepare_request(query, provider, args) {
-    let { system, history, prefill, max_tokens, api_key, stream } = args ?? {};
+function prepare_request(query, args) {
+    let { provider: pname, system, history, prefill, max_tokens, api_key, stream, ...pargs } = args ?? {};
+    pname = pname ?? 'local';
     max_tokens = max_tokens ?? 1024;
     stream = stream ?? false;
 
     // get request url
+    const provider = get_provider(pname, pargs);
     const url = host_url(provider.url, provider.port);
 
     // check authorization
@@ -158,26 +169,24 @@ function prepare_request(query, provider, args) {
     }
 
     // get request params
-    const extra = provider.extra ?? {};
+    const head = provider.headers ?? {};
+    const body = provider.body ?? {};
     const model = provider.model ? { model: provider.model } : {};
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
     const message = provider.payload(query, { system, history, prefill });
 
     // prepare request
-    const headers = { 'Content-Type': 'application/json', ...authorize, ...extra };
-    const payload = { ...message, ...model, stream, [max_tokens_name]: max_tokens };
+    const headers = { 'Content-Type': 'application/json', ...authorize, ...head };
+    const payload = { ...message, ...model, stream, [max_tokens_name]: max_tokens, ...body };
 
     // relevant parameters
-    return { url, headers, payload };
+    return { provider, url, headers, payload };
 }
 
-async function reply(query, args0) {
-    const { provider, ...args } = args0 ?? {};
-
+async function reply(query, args) {
     // get provider settings
-    const prov = get_provider(provider ?? 'local');
-    const { url, headers, payload } = prepare_request(query, prov, args);
+    const { provider, url, headers, payload } = prepare_request(query, args);
 
     // make request
     const response = await fetch(url, {
@@ -193,24 +202,21 @@ async function reply(query, args0) {
     }
 
     // return json data
-    return prov.response(data);
+    return provider.response(data);
 }
 
 //
 // streaming
 //
 
-async function* stream(query, args0) {
-    const { provider, ...args } = args0 ?? {};
-
+async function* stream(query, args) {
     // prepare request
-    const prov = get_provider(provider ?? 'local');
     const args1 = { ...args, stream: true };
-    const { url, headers, payload } = prepare_request(query, prov, args1);
+    const { provider, url, headers, payload } = prepare_request(query, args1);
 
     // make stream parser
     const transform = (chunk, controller) => {
-        for (const data of prov.stream(chunk)) {
+        for (const data of provider.stream(chunk)) {
             controller.enqueue(data);
         }
     }
