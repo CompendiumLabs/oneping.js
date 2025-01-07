@@ -7,7 +7,23 @@ function robustParse(json) {
         return JSON.parse(json);
     } catch (e) {
         console.error(e);
+        console.log(json);
         return null;
+    }
+}
+
+async function* streamSSE(stream) {
+    let buf = ''
+    for await (const chunk of stream) {
+        buf += chunk
+        let boundary;
+        while ((boundary = buf.indexOf('\n\n')) >= 0) {
+            yield buf.slice(0, boundary)
+            buf = buf.slice(boundary + 2)
+        }
+    }
+    if (buf.length > 0) {
+        yield buf
     }
 }
 
@@ -73,31 +89,24 @@ function extractor_anthropic(response) {
     return response.content[0].text;
 }
 
-function* stream_openai(response) {
-    for (const block of response.split('\n\n')) {
-        if (block.length == 0) continue;
-        const [match, data0] = /^data: (.*)$/.exec(block)
-        if (data0 == '[DONE]') break;
-        const data = robustParse(data0);
-        if (data == null) continue;
-        const text = data.choices[0].delta.content;
-        if (text != null) yield text;
-    }
+function stream_openai(chunk) {
+    const [match, data0] = /^data: (.*)$/.exec(chunk)
+    if (data0 == '[DONE]') return;
+    const data = robustParse(data0);
+    if (data == null) return;
+    return data.choices[0].delta.content;
 }
 
-function* stream_anthropic(chunk) {
-    for (const block of chunk.split('\n\n')) {
-        if (block.length == 0) continue;
-        const [line1, line2] = block.split('\n')
-        const [match1, event] = /^event: (.*)$/.exec(line1)
-        const [match2, data0] = /^data: (.*)$/.exec(line2)
-        const data = robustParse(data0);
-        if (data == null) continue;
-        if (event == 'content_block_start') {
-            yield data.content_block.text;
-        } else if (event == 'content_block_delta') {
-            yield data.delta.text;
-        }
+function stream_anthropic(chunk) {
+    const [line1, line2] = chunk.split('\n')
+    const [match1, event] = /^event: (.*)$/.exec(line1)
+    const [match2, data0] = /^data: (.*)$/.exec(line2)
+    const data = robustParse(data0);
+    if (data == null) return;
+    if (event == 'content_block_start') {
+        return data.content_block.text;
+    } else if (event == 'content_block_delta') {
+        return data.delta.text;
     }
 }
 
@@ -248,12 +257,13 @@ async function* stream(query, args) {
     }
 
     // stream decode and parse
-    const stream = response.body
-        .pipeThrough(new TextDecoderStream())
-        .pipeThrough(new TransformStream({ transform }));
+    const stream = response.body.pipeThrough(new TextDecoderStream())
 
-    // yield chunks
-    yield* stream;
+    // process stream one SSE event at a time
+    for await (const data of streamSSE(stream)) {
+        const text = provider.stream(data);
+        if (text != null) yield text;
+    }
 }
 
 class Chat {
