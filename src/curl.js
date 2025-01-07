@@ -156,7 +156,6 @@ function host_url(url, port) {
 function prepare_request(query, args) {
     let { provider: pname, system, history, prefill, max_tokens, api_key, stream, ...pargs } = args ?? {};
     pname = pname ?? 'local';
-    max_tokens = max_tokens ?? 1024;
     stream = stream ?? false;
 
     // get request url
