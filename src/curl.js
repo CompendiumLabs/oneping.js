@@ -1,5 +1,9 @@
 // a javascript mini-library for making chat completion requests to an LLM provider
 
+// constants and presets
+
+const DEFAULT_MAX_TOKENS = 1024;
+
 // general utilities
 
 function robustParse(json) {
@@ -43,6 +47,10 @@ function authorize_anthropic(apiKey) {
 // payloads
 //
 
+function payload_oneping(query, args) {
+    return { query, ...args };
+}
+
 function payload_openai(query, args) {
     const { system, history, prefill } = args ?? {};
     let messages = [];
@@ -81,12 +89,20 @@ function payload_anthropic(query, args) {
 // extractors
 //
 
+function extractor_oneping(response) {
+    return response;
+}
+
 function extractor_openai(response) {
     return response.choices[0].message.content;
 }
 
 function extractor_anthropic(response) {
     return response.content[0].text;
+}
+
+function stream_oneping(chunk) {
+    return chunk;
 }
 
 function stream_openai(chunk) {
@@ -122,8 +138,17 @@ const DEFAULT_PROVIDER = {
 
 const providers = {
     local: {
-        url: port => `http://localhost:${port}/v1/chat/completions`,
+        url: (host, port) => `http://${host}:${port}/v1/chat/completions`,
+        host: 'localhost',
         port: 8000,
+    },
+    oneping: {
+        url: (host, port) => `http://${host}:${port}/chat`,
+        host: 'localhost',
+        port: 5000,
+        payload: payload_oneping,
+        response: extractor_oneping,
+        stream: stream_oneping,
     },
     openai: {
         url: 'https://api.openai.com/v1/chat/completions',
@@ -167,8 +192,8 @@ function get_provider(provider, args) {
     return { ...DEFAULT_PROVIDER, ...pdata, ...args };
 }
 
-function host_url(url, port) {
-    return (typeof url === 'function') ? url(port) : url;
+function host_url(url, host, port) {
+    return (typeof url === 'function') ? url(host, port) : url;
 }
 
 //
@@ -182,7 +207,7 @@ function prepare_request(query, args) {
 
     // get request url
     const provider = get_provider(pname, pargs);
-    const url = host_url(provider.url, provider.port);
+    const url = host_url(provider.url, provider.host, provider.port);
 
     // check authorization
     if (provider.authorize != null && api_key == null) {
@@ -194,7 +219,7 @@ function prepare_request(query, args) {
     const body = provider.body ?? {};
     const model = provider.model ? { model: provider.model } : {};
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
-    const toks = (max_tokens != null) ? { [max_tokens_name]: max_tokens } : {};
+    const toks = { [max_tokens_name]: max_tokens ?? DEFAULT_MAX_TOKENS };
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
     const message = provider.payload(query, { system, history, prefill });
 
@@ -232,16 +257,10 @@ async function reply(query, args) {
 //
 
 async function* stream(query, args) {
+
     // prepare request
     const args1 = { ...args, stream: true };
     const { provider, url, headers, payload } = prepare_request(query, args1);
-
-    // make stream parser
-    const transform = (chunk, controller) => {
-        for (const data of provider.stream(chunk)) {
-            controller.enqueue(data);
-        }
-    }
 
     // make request
     const response = await fetch(url, {

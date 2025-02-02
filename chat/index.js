@@ -21,6 +21,7 @@ const key_input = document.querySelector('#key-input');
 const key_button = document.querySelector('#key-button');
 const prov_input = document.querySelector('#prov-input');
 const prov_button = document.querySelector('#prov-button');
+const model_input = document.querySelector('#model-input');
 
 function make_message(role, content, system=false) {
     const content_cls = system ? ['italic'] : [];
@@ -68,16 +69,33 @@ function set_provider(provider) {
     }
 }
 
+function get_model() {
+    return localStorage.getItem('chat-model');
+}
+
+function set_model(model) {
+    localStorage.setItem('chat-model', model);
+}
+
 // get query arguments
 function get_query_args() {
     const provider = get_provider();
+    const model = get_model();
     const api_key = get_api_key(provider);
-    return { provider, system, api_key };
+    const args = { provider };
+    if (model) args.model = model;
+    if (api_key) args.api_key = api_key;
+    return args;
 }
 
 //
 // event handlers
 //
+
+async function parse_markdown(text) {
+    const text1 = text.replace('•', '-').replace('•', '-');
+    return await md.marked(text1);
+}
 
 // handle keypress
 query.addEventListener('keypress', async (event) => {
@@ -106,7 +124,7 @@ query.addEventListener('keypress', async (event) => {
         const response = chat.stream(query_value, args);
         for await (const chunk of response) {
             text += chunk;
-            reply_box.innerHTML = await md.marked(text);
+            reply_box.innerHTML = await parse_markdown(text);
         }
 
         // show query box
@@ -128,17 +146,26 @@ prov_input.addEventListener('input', () => {
     set_provider(provider);
 });
 
+// handle model input
+model_input.addEventListener('input', () => {
+    const model = model_input.value;
+    set_model(model);
+});
+
 //
 // configuration
 //
 
 // get stored provider
 const provider = get_provider() ?? 'anthropic';
+const model = get_model() ?? null;
 const widget = new ApiKeyWidget(key_input, key_button);
 
 // apply to control ui
 prov_input.value = provider;
+model_input.value = model;
 set_provider(provider);
+set_model(model);
 
 //
 // main
