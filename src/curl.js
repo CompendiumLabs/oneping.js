@@ -257,7 +257,6 @@ async function reply(query, args) {
 //
 
 async function* stream(query, args) {
-
     // prepare request
     const args1 = { ...args, stream: true };
     const { provider, url, headers, payload } = prepare_request(query, args1);
