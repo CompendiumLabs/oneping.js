@@ -86,18 +86,18 @@ function payload_anthropic(query, args) {
 }
 
 //
-// extractors
+// response handlers
 //
 
-function extractor_oneping(response) {
+function response_oneping(response) {
     return response;
 }
 
-function extractor_openai(response) {
+function response_openai(response) {
     return response.choices[0].message.content;
 }
 
-function extractor_anthropic(response) {
+function response_anthropic(response) {
     return response.content[0].text;
 }
 
@@ -132,7 +132,7 @@ function stream_anthropic(chunk) {
 
 const DEFAULT_PROVIDER = {
     payload: payload_openai,
-    response: extractor_openai,
+    response: response_openai,
     stream: stream_openai,
 }
 
@@ -147,7 +147,7 @@ const providers = {
         host: 'localhost',
         port: 5000,
         payload: payload_oneping,
-        response: extractor_oneping,
+        response: response_oneping,
         stream: stream_oneping,
     },
     openai: {
@@ -160,7 +160,7 @@ const providers = {
         url: 'https://api.anthropic.com/v1/messages',
         authorize: authorize_anthropic,
         payload: payload_anthropic,
-        response: extractor_anthropic,
+        response: response_anthropic,
         stream: stream_anthropic,
         model: 'claude-3-5-sonnet-latest',
         headers: {
