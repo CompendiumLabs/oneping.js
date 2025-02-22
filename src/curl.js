@@ -6,7 +6,7 @@ const DEFAULT_MAX_TOKENS = 1024;
 
 // general utilities
 
-function robustParse(json) {
+function robust_parse(json) {
     try {
         return JSON.parse(json);
     } catch (e) {
@@ -16,7 +16,7 @@ function robustParse(json) {
     }
 }
 
-async function* streamSSE(stream) {
+async function* buffer_sse(stream) {
     let buf = ''
     for await (const chunk of stream) {
         buf += chunk
@@ -28,6 +28,14 @@ async function* streamSSE(stream) {
     }
     if (buf.length > 0) {
         yield buf
+    }
+}
+
+async function* parse_sse(stream) {
+    for await (const chunk of stream) {
+        const [match, data0] = /^data: (.*)$/.exec(chunk)
+        if (data0 == '[DONE]') return;
+        yield robust_parse(data0);
     }
 }
 
@@ -106,23 +114,12 @@ function stream_oneping(chunk) {
 }
 
 function stream_openai(chunk) {
-    const [match, data0] = /^data: (.*)$/.exec(chunk)
-    if (data0 == '[DONE]') return;
-    const data = robustParse(data0);
-    if (data == null) return;
-    return data.choices[0].delta.content;
+    return chunk.choices[0].delta.content;
 }
 
 function stream_anthropic(chunk) {
-    const [line1, line2] = chunk.split('\n')
-    const [match1, event] = /^event: (.*)$/.exec(line1)
-    const [match2, data0] = /^data: (.*)$/.exec(line2)
-    const data = robustParse(data0);
-    if (data == null) return;
-    if (event == 'content_block_start') {
-        return data.content_block.text;
-    } else if (event == 'content_block_delta') {
-        return data.delta.text;
+    if (chunk.type == 'content_block_delta') {
+        return chunk.delta.text;
     }
 }
 
@@ -276,9 +273,11 @@ async function* stream(query, args) {
 
     // stream decode and parse
     const stream = response.body.pipeThrough(new TextDecoderStream())
+    const lines = buffer_sse(stream);
+    const chunks = parse_sse(lines);
 
-    // process stream one SSE event at a time
-    for await (const data of streamSSE(stream)) {
+    // process stream one chunk at a time
+    for await (const data of chunks) {
         const text = provider.stream(data);
         if (text != null) yield text;
     }

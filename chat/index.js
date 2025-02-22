@@ -74,7 +74,11 @@ function get_model() {
 }
 
 function set_model(model) {
-    localStorage.setItem('chat-model', model);
+    if (model != null && model != '') {
+        localStorage.setItem('chat-model', model);
+    } else {
+        localStorage.removeItem('chat-model');
+    }
 }
 
 // get query arguments
