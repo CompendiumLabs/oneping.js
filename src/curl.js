@@ -33,14 +33,12 @@ async function* buffer_sse(stream) {
 
 async function* parse_sse(stream) {
     for await (const chunk of stream) {
-        console.log('CHUNK', chunk);
         const lines = chunk.split('\n');
         for (const line of lines) {
             const match = /^data: (.*)$/.exec(line)
             if (match == null) continue;
             const [_, data] = match;
             if (data == '[DONE]') return;
-            console.log('DATA', data);
             yield robust_parse(data);
         }
     }
@@ -275,7 +273,7 @@ async function* stream(query, args) {
     // check status
     if (!response.ok) {
         const data = await response.json();
-        throw new Error(`Status ${response.status}: ${data.error.message}`);
+        throw new Error(`Status ${response.status}: ${data.message}`);
     }
 
     // stream decode and parse
