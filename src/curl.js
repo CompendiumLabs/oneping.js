@@ -21,9 +21,9 @@ async function* buffer_sse(stream) {
     for await (const chunk of stream) {
         buf += chunk
         let boundary;
-        while ((boundary = buf.indexOf('\n\n')) >= 0) {
+        while ((boundary = buf.indexOf('\n')) >= 0) {
             yield buf.slice(0, boundary)
-            buf = buf.slice(boundary + 2)
+            buf = buf.slice(boundary + 1)
         }
     }
     if (buf.length > 0) {
@@ -31,16 +31,14 @@ async function* buffer_sse(stream) {
     }
 }
 
+const reg_data = new RegExp('^data: (.*)$');
 async function* parse_sse(stream) {
-    for await (const chunk of stream) {
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-            const match = /^data: (.*)$/.exec(line)
-            if (match == null) continue;
-            const [_, data] = match;
-            if (data == '[DONE]') return;
-            yield robust_parse(data);
-        }
+    for await (const line of stream) {
+        const match = reg_data.exec(line)
+        if (match == null) continue;
+        const [_, data] = match;
+        if (data == '[DONE]') return;
+        yield robust_parse(data);
     }
 }
 
