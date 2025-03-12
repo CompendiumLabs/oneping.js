@@ -55,6 +55,51 @@ function authorize_anthropic(apiKey) {
 }
 
 //
+// contents
+//
+
+async function blob_to_url(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+            const url = event.target.result
+            resolve(url)
+        }
+        reader.onerror = (error) => {
+            console.error('blobToUrl error', error)
+            reject(new Error(`Blob to url error: ${error}`))
+        }
+        reader.readAsDataURL(blob)
+    })
+}
+
+async function convert_image(image) {
+    const url = (image instanceof Blob) ? await blob_to_url(image) : image;
+    if (typeof url != 'string') {
+        throw new Error(`Unsupported image type: ${typeof image}`);
+    }
+    const match = url.match(/^data:image\/(\w+);base64,(.*)$/);
+    if (match != null) {
+        const [_, type, data] = match;
+        return { type, data };
+    } else {
+        throw new Error(`Unsupported image string: ${url}`);
+    }
+}
+
+async function content_openai(text, image=null) {
+    let contents = [];
+    if (image != null) {
+        const { type, data } = await convert_image(image);
+        contents.push({ type: 'image', source: { type: 'base64', media_type: type, data } });
+    }
+    if (text != null) {
+        contents.push({ type: 'text', text });
+    }
+    return contents;
+}
+
+//
 // payloads
 //
 
@@ -131,6 +176,7 @@ function stream_anthropic(chunk) {
 //
 
 const DEFAULT_PROVIDER = {
+    content: content_openai,
     payload: payload_openai,
     response: response_openai,
     stream: stream_openai,
