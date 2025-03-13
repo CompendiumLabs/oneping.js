@@ -74,11 +74,11 @@ async function blob_to_url(blob) {
 }
 
 async function convert_image(image) {
-    const url = (image instanceof Blob) ? await blob_to_url(image) : image;
-    if (typeof url != 'string') {
+    if (image instanceof Blob) image = await blob_to_url(image);
+    if (typeof image != 'string') {
         throw new Error(`Unsupported image type: ${typeof image}`);
     }
-    const match = url.match(/^data:image\/(\w+);base64,(.*)$/);
+    const match = image.match(/^data:image\/(\w+);base64,(.*)$/);
     if (match != null) {
         const [_, type, data] = match;
         return { type, data };
@@ -88,15 +88,29 @@ async function convert_image(image) {
 }
 
 async function content_openai(text, image=null) {
-    let contents = [];
-    if (image != null) {
-        const { type, data } = await convert_image(image);
-        contents.push({ type: 'image', source: { type: 'base64', media_type: type, data } });
-    }
-    if (text != null) {
-        contents.push({ type: 'text', text });
-    }
-    return contents;
+    if (image == null) return text;
+    const { type, data } = await convert_image(image);
+    const image_url = { url: `data:image/${type};base64,${data}` };
+    return [
+        { type: 'image_url', image_url },
+        { type: 'text', text },
+    ];
+}
+
+async function content_anthropic(text, image=null) {
+    if (image == null) return text;
+    const { type, data } = await convert_image(image);
+    const source = { type: 'base64', media_type: type, data };
+    return [
+        { type: 'image', source },
+        { type: 'text', text },
+    ];
+}
+
+async function content_oneping(text, image=null) {
+    if (image == null) return text;
+    if (image instanceof Blob) image = await blob_to_url(image);
+    return { image, text };
 }
 
 //
@@ -107,7 +121,7 @@ function payload_oneping(query, args) {
     return { query, ...args };
 }
 
-function payload_openai(query, args) {
+function payload_openai(content, args) {
     const { system, history, prefill } = args ?? {};
     let messages = [];
     if (system != null) {
@@ -116,7 +130,7 @@ function payload_openai(query, args) {
     if (history != null) {
         messages.push(...history);
     }
-    messages.push({ role: 'user', content: query });
+    messages.push({ role: 'user', content });
     if (prefill != null) {
         messages.push({ role: 'assistant', content: prefill });
     }
@@ -124,13 +138,13 @@ function payload_openai(query, args) {
     return payload;
 }
 
-function payload_anthropic(query, args) {
+function payload_anthropic(content, args) {
     const { system, history, prefill } = args ?? {};
     let messages = [];
     if (history != null) {
         messages.push(...history);
     }
-    messages.push({ role: 'user', content: query });
+    messages.push({ role: 'user', content });
     if (prefill != null) {
         messages.push({ role: 'assistant', content: prefill });
     }
@@ -192,6 +206,7 @@ const providers = {
         url: (host, port) => `http://${host}:${port}/chat`,
         host: 'localhost',
         port: 5000,
+        content: content_oneping,
         payload: payload_oneping,
         response: response_oneping,
         stream: stream_oneping,
@@ -205,6 +220,7 @@ const providers = {
     anthropic: {
         url: 'https://api.anthropic.com/v1/messages',
         authorize: authorize_anthropic,
+        content: content_anthropic,
         payload: payload_anthropic,
         response: response_anthropic,
         stream: stream_anthropic,
@@ -247,7 +263,10 @@ function host_url(url, host, port) {
 //
 
 function prepare_request(query, args) {
-    let { provider: pname, system, history, prefill, max_tokens, api_key, stream, ...pargs } = args ?? {};
+    let {
+        provider: pname, system, history, image, prefill,
+        max_tokens, api_key, stream, ...pargs
+    } = args ?? {};
     pname = pname ?? 'local';
     stream = stream ?? false;
 
@@ -260,16 +279,21 @@ function prepare_request(query, args) {
         throw new Error('API key is required');
     }
 
-    // get request params
+    // get extra parameters
     const head = provider.headers ?? {};
     const body = provider.body ?? {};
+
+    // get generation parameters
     const model = provider.model ? { model: provider.model } : {};
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
     const toks = { [max_tokens_name]: max_tokens ?? DEFAULT_MAX_TOKENS };
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
-    const message = provider.payload(query, { system, history, prefill });
 
-    // prepare request
+    // make message payload
+    const content = provider.content(query, image);
+    const message = provider.payload(content, { system, history, prefill });
+
+    // compose request
     const headers = { 'Content-Type': 'application/json', ...authorize, ...head };
     const payload = { ...message, ...model, ...toks, stream, ...body };
 
