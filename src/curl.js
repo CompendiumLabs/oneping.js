@@ -73,53 +73,41 @@ async function blob_to_url(blob) {
     })
 }
 
-async function convert_image(image) {
-    if (image instanceof Blob) image = await blob_to_url(image);
-    if (typeof image != 'string') {
-        throw new Error(`Unsupported image type: ${typeof image}`);
-    }
-    const match = image.match(/^data:image\/(\w+);base64,(.*)$/);
+function convert_image(image) {
+    const match = image.match(/^data:(\w+);base64,(.*)$/);
     if (match != null) {
         const [_, type, data] = match;
         return { type, data };
     } else {
-        throw new Error(`Unsupported image string: ${url}`);
+        throw new Error(`Unsupported image string: ${image}`);
     }
 }
 
-async function content_openai(text, image=null) {
-    if (image == null) return text;
-    const { type, data } = await convert_image(image);
-    const image_url = { url: `data:image/${type};base64,${data}` };
+function content_openai(query, image=null) {
+    if (image == null) return query;
     return [
-        { type: 'image_url', image_url },
-        { type: 'text', text },
+        { type: 'image_url', image_url: image },
+        { type: 'text', text: query },
     ];
 }
 
-async function content_anthropic(text, image=null) {
-    if (image == null) return text;
-    const { type, data } = await convert_image(image);
+function content_anthropic(query, image=null) {
+    if (image == null) return query;
+    const { type, data } = convert_image(image);
     const source = { type: 'base64', media_type: type, data };
     return [
         { type: 'image', source },
-        { type: 'text', text },
+        { type: 'text', text: query },
     ];
 }
 
-async function content_oneping(text, image=null) {
-    if (image == null) return text;
-    if (image instanceof Blob) image = await blob_to_url(image);
-    return { image, text };
+function content_oneping(query, image=null) {
+    return { image, text: query };
 }
 
 //
 // payloads
 //
-
-function payload_oneping(query, args) {
-    return { query, ...args };
-}
 
 function payload_openai(content, args) {
     const { system, history, prefill } = args ?? {};
@@ -153,6 +141,11 @@ function payload_anthropic(content, args) {
         payload.system = system;
     }
     return payload;
+}
+
+function payload_oneping(content, args) {
+    const { image, text } = content;
+    return { query: text, image, ...args };
 }
 
 //
@@ -255,16 +248,25 @@ function get_provider(provider, args) {
 }
 
 function host_url(url, host, port) {
-    return (typeof url === 'function') ? url(host, port) : url;
+    return (typeof url == 'function') ? url(host, port) : url;
 }
 
 //
 // reply
 //
 
+// converts history from oneping { text, image } format to provider format
+function convert_history(content_func, history) {
+    return history.map(h => {
+        const { role, content } = h;
+        const { text, image } = content;
+        return { role, content: content_func(text, image) };
+    });
+}
+
 function prepare_request(query, args) {
     let {
-        provider: pname, system, history, image, prefill,
+        provider: pname, system, history, image, prefill, prediction,
         max_tokens, api_key, stream, ...pargs
     } = args ?? {};
     pname = pname ?? 'local';
@@ -283,11 +285,17 @@ function prepare_request(query, args) {
     const head = provider.headers ?? {};
     const body = provider.body ?? {};
 
-    // get generation parameters
+    // get provider parameters
     const model = provider.model ? { model: provider.model } : {};
+    const authorize = provider.authorize ? provider.authorize(api_key) : {};
+
+    // get generation parameters
     const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
     const toks = { [max_tokens_name]: max_tokens ?? DEFAULT_MAX_TOKENS };
-    const authorize = provider.authorize ? provider.authorize(api_key) : {};
+    const predict = prediction ? { prediction } : {};
+
+    // convert history to provider format
+    history = convert_history(provider.content, history);
 
     // make message payload
     const content = provider.content(query, image);
@@ -295,7 +303,7 @@ function prepare_request(query, args) {
 
     // compose request
     const headers = { 'Content-Type': 'application/json', ...authorize, ...head };
-    const payload = { ...message, ...model, ...toks, stream, ...body };
+    const payload = { ...message, ...model, ...toks, ...predict, stream, ...body };
 
     // relevant parameters
     return { provider, url, headers, payload };
@@ -364,15 +372,17 @@ class Chat {
     }
 
     async reply(query, args) {
+        const { image } = args ?? {};
         const text = await reply(query, {
             system: this.system, history: this.history, ...this.args, ...args
         });
-        this.history.push({ role: 'user', content: query });
-        this.history.push({ role: 'assistant', content: text });
+        this.history.push({ role: 'user', content: { text: query, image } });
+        this.history.push({ role: 'assistant', content: { text } });
         return text;
     }
 
     async* stream(query, args) {
+        const { image } = args ?? {};
         let reply = '';
         const response = stream(query, {
             system: this.system, history: this.history, ...this.args, ...args
@@ -381,8 +391,8 @@ class Chat {
             reply += chunk;
             yield chunk;
         }
-        this.history.push({ role: 'user', content: query });
-        this.history.push({ role: 'assistant', content: reply });
+        this.history.push({ role: 'user', content: { text: query, image } });
+        this.history.push({ role: 'assistant', content: { text: reply } });
     }
 }
 
