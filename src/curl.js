@@ -58,21 +58,6 @@ function authorize_anthropic(apiKey) {
 // contents
 //
 
-async function blob_to_url(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-            const url = event.target.result
-            resolve(url)
-        }
-        reader.onerror = (error) => {
-            console.error('blobToUrl error', error)
-            reject(new Error(`Blob to url error: ${error}`))
-        }
-        reader.readAsDataURL(blob)
-    })
-}
-
 function convert_image(image) {
     const match = image.match(/^data:(\w+);base64,(.*)$/);
     if (match != null) {
@@ -83,26 +68,27 @@ function convert_image(image) {
     }
 }
 
-function content_openai(query, image=null) {
-    if (image == null) return query;
+function content_openai(text, image=null) {
+    if (image == null) return text;
     return [
         { type: 'image_url', image_url: image },
-        { type: 'text', text: query },
+        { type: 'text', text },
     ];
 }
 
-function content_anthropic(query, image=null) {
-    if (image == null) return query;
+function content_anthropic(text, image=null) {
+    if (image == null) return text;
     const { type, data } = convert_image(image);
     const source = { type: 'base64', media_type: type, data };
     return [
         { type: 'image', source },
-        { type: 'text', text: query },
+        { type: 'text', text },
     ];
 }
 
-function content_oneping(query, image=null) {
-    return { image, text: query };
+function content_oneping(text, image=null) {
+    if (image == null) return text;
+    return { image, text };
 }
 
 //
@@ -144,7 +130,8 @@ function payload_anthropic(content, args) {
 }
 
 function payload_oneping(content, args) {
-    const { image, text } = content;
+    if (typeof content == 'string') return { query: content, ...args };
+    const { text, image } = content;
     return { query: text, image, ...args };
 }
 
@@ -256,10 +243,10 @@ function host_url(url, host, port) {
 //
 
 // converts history from oneping { text, image } format to provider format
-function convert_history(content_func, history) {
+function convert_history(history, content_func) {
     return history.map(h => {
         const { role, content } = h;
-        const { text, image } = content;
+        const { text, image } = (typeof content == 'string') ? { text: content } : content;
         return { role, content: content_func(text, image) };
     });
 }
@@ -295,7 +282,7 @@ function prepare_request(query, args) {
     const predict = prediction ? { prediction } : {};
 
     // convert history to provider format
-    history = convert_history(provider.content, history);
+    history = convert_history(history, provider.content);
 
     // make message payload
     const content = provider.content(query, image);
@@ -376,23 +363,23 @@ class Chat {
         const text = await reply(query, {
             system: this.system, history: this.history, ...this.args, ...args
         });
-        this.history.push({ role: 'user', content: { text: query, image } });
-        this.history.push({ role: 'assistant', content: { text } });
+        this.history.push({ role: 'user', content: content_oneping(query, image) });
+        this.history.push({ role: 'assistant', content: text });
         return text;
     }
 
     async* stream(query, args) {
         const { image } = args ?? {};
-        let reply = '';
+        let text = '';
         const response = stream(query, {
             system: this.system, history: this.history, ...this.args, ...args
         });
         for await (const chunk of response) {
-            reply += chunk;
+            text += chunk;
             yield chunk;
         }
-        this.history.push({ role: 'user', content: { text: query, image } });
-        this.history.push({ role: 'assistant', content: { text: reply } });
+        this.history.push({ role: 'user', content: content_oneping(query, image) });
+        this.history.push({ role: 'assistant', content: text });
     }
 }
 

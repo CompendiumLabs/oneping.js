@@ -132,7 +132,26 @@ function h(tag, args, children) {
 }
 
 //
+// image conversion
+//
+
+async function blob_to_url(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+            const url = event.target.result
+            resolve(url)
+        }
+        reader.onerror = (error) => {
+            console.error('blobToUrl error', error)
+            reject(new Error(`Blob to url error: ${error}`))
+        }
+        reader.readAsDataURL(blob)
+    })
+}
+
+//
 // exports
 //
 
-export { get_api_key, set_api_key, clear_api_key, ApiKeyWidget, h };
+export { get_api_key, set_api_key, clear_api_key, ApiKeyWidget, h, blob_to_url };
