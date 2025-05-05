@@ -1,6 +1,6 @@
 // client-side chat interface
 
-import { Chat, PROVIDERS } from '../src/curl.js';
+import { Chat, providers } from '../src/curl.js';
 import { ApiKeyWidget, get_api_key, h } from '../src/utils.js';
 
 //
@@ -48,7 +48,7 @@ function get_provider() {
 }
 
 function is_valid_provider(provider) {
-    return PROVIDERS.includes(provider);
+    return Object.keys(providers).includes(provider);
 }
 
 // update valid indicator

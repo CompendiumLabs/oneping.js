@@ -124,7 +124,11 @@ function payload_anthropic(content, args) {
     }
     let payload = { messages };
     if (system != null) {
-        payload.system = system;
+        payload.system = [ {
+            type: 'text',
+            text: system,
+            cache_control: { type: 'ephemeral' },
+        } ];
     }
     return payload;
 }
@@ -170,6 +174,10 @@ function stream_anthropic(chunk) {
 //
 
 const DEFAULT_PROVIDER = {
+    chat_path: 'chat/completions',
+    embed_path: 'embeddings',
+    transcribe_path: 'audio/transcriptions',
+    authorize: authorize_openai,
     content: content_openai,
     payload: payload_openai,
     response: response_openai,
@@ -178,52 +186,55 @@ const DEFAULT_PROVIDER = {
 
 const providers = {
     local: {
-        url: (host, port) => `http://${host}:${port}/v1/chat/completions`,
-        host: 'localhost',
-        port: 8000,
+        base_url: 'http://localhost:8000',
+        authorize: null,
     },
     oneping: {
-        url: (host, port) => `http://${host}:${port}/chat`,
-        host: 'localhost',
-        port: 5000,
+        base_url: 'http://localhost:5000',
+        chat_path: 'chat',
+        authorize: null,
+        max_tokens_name: 'max_tokens',
         content: content_oneping,
         payload: payload_oneping,
         response: response_oneping,
         stream: stream_oneping,
     },
     openai: {
-        url: 'https://api.openai.com/v1/chat/completions',
-        authorize: authorize_openai,
-        model: 'gpt-4o',
-        max_tokens_name: 'max_completion_tokens',
+        base_url: 'https://api.openai.com/v1',
+        chat_model: 'gpt-4o',
+        embed_model: 'text-embedding-3-large',
+        transcribe_model: 'gpt-4o-transcribe',
     },
     anthropic: {
-        url: 'https://api.anthropic.com/v1/messages',
+        base_url: 'https://api.anthropic.com/v1',
+        chat_path: 'messages',
+        max_tokens_name: 'max_tokens',
         authorize: authorize_anthropic,
         content: content_anthropic,
         payload: payload_anthropic,
         response: response_anthropic,
         stream: stream_anthropic,
-        model: 'claude-3-5-sonnet-latest',
+        chat_model: 'claude-3-7-sonnet-latest',
         headers: {
             'anthropic-version': '2023-06-01',
-            'anthropic-beta': 'prompt-caching-2024-07-31',
             'anthropic-dangerous-direct-browser-access': 'true',
         },
     },
+    google: {
+        base_url: 'https://generativelanguage.googleapis.com/v1beta',
+        chat_model: 'gemini-2.0-flash-exp',
+        embed_model: 'gemini-embedding-exp-03-07',
+    },
     fireworks: {
-        url: 'https://api.fireworks.ai/inference/v1/chat/completions',
-        authorize: authorize_openai,
+        base_url: 'https://api.fireworks.ai/inference/v1',
         model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
     },
     groq: {
-        url: 'https://api.groq.com/openai/v1/chat/completions',
-        authorize: authorize_openai,
+        base_url: 'https://api.groq.com/openai/v1',
         model: 'llama-3.1-70b-versatile',
     },
     deepseek: {
-        url: 'https://api.deepseek.com/chat/completions',
-        authorize: authorize_openai,
+        base_url: 'https://api.deepseek.com',
         model: 'deepseek-chat',
     },
 };
@@ -234,13 +245,14 @@ function get_provider(provider, args) {
     return { ...DEFAULT_PROVIDER, ...pdata, ...args };
 }
 
-function host_url(url, host, port) {
-    return (typeof url == 'function') ? url(host, port) : url;
-}
+//
+// payloads
+//
 
-//
-// reply
-//
+function prepare_url(prov, path_key) {
+    const { base_url, [path_key]: path } = prov;
+    return `${base_url}/${path}`;
+}
 
 // converts history from oneping { text, image } format to provider format
 function convert_history(history, content_func) {
@@ -261,7 +273,7 @@ function prepare_request(query, args) {
 
     // get request url
     const provider = get_provider(pname, pargs);
-    const url = host_url(provider.url, provider.host, provider.port);
+    const url = prepare_url(provider, 'chat_path');
 
     // check authorization
     if (provider.authorize != null && api_key == null) {
@@ -277,7 +289,7 @@ function prepare_request(query, args) {
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
 
     // get generation parameters
-    const max_tokens_name = provider.max_tokens_name ?? 'max_tokens';
+    const max_tokens_name = provider.max_tokens_name ?? 'max_completion_tokens';
     const toks = { [max_tokens_name]: max_tokens ?? DEFAULT_MAX_TOKENS };
     const predict = prediction ? { prediction } : {};
 
@@ -295,6 +307,10 @@ function prepare_request(query, args) {
     // relevant parameters
     return { provider, url, headers, payload };
 }
+
+//
+// reply
+//
 
 async function reply(query, args) {
     // get provider settings
@@ -318,7 +334,7 @@ async function reply(query, args) {
 }
 
 //
-// streaming
+// stream
 //
 
 async function* stream(query, args) {
@@ -350,6 +366,10 @@ async function* stream(query, args) {
         if (text != null) yield text;
     }
 }
+
+//
+// chat
+//
 
 class Chat {
     constructor(system, args) {
@@ -387,4 +407,4 @@ class Chat {
 // exports
 //
 
-export { reply, stream, Chat, PROVIDERS };
+export { reply, stream, Chat, providers };
