@@ -221,8 +221,8 @@ const providers = {
         },
     },
     google: {
-        base_url: 'https://generativelanguage.googleapis.com/v1beta',
-        chat_model: 'gemini-2.0-flash-exp',
+        base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        chat_model: 'gemini-2.5-flash',
         embed_model: 'gemini-embedding-exp-03-07',
     },
     fireworks: {
@@ -285,7 +285,7 @@ function prepare_request(query, args) {
     const body = provider.body ?? {};
 
     // get provider parameters
-    const model = provider.model ? { model: provider.model } : {};
+    const model = provider.chat_model ? { model: provider.chat_model } : {};
     const authorize = provider.authorize ? provider.authorize(api_key) : {};
 
     // get generation parameters
@@ -294,7 +294,7 @@ function prepare_request(query, args) {
     const predict = prediction ? { prediction } : {};
 
     // convert history to provider format
-    history = convert_history(history, provider.content);
+    history = (history != null) ? convert_history(history, provider.content) : null;
 
     // make message payload
     const content = provider.content(query, image);
@@ -326,7 +326,7 @@ async function reply(query, args) {
 
     // check status
     if (!response.ok) {
-        throw new Error(`Status ${response.status}: ${data.error.message}`);
+        throw new Error(`Status ${response.status}: ${JSON.stringify(data)}`);
     }
 
     // return json data
