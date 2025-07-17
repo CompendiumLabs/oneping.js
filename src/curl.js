@@ -1,9 +1,5 @@
 // a javascript mini-library for making chat completion requests to an LLM provider
 
-// constants and presets
-
-const DEFAULT_MAX_TOKENS = 1024;
-
 // general utilities
 
 function robust_parse(json) {
@@ -144,7 +140,11 @@ function payload_oneping(content, args) {
 //
 
 function response_oneping(response) {
-    return response;
+    const { success, data } = response;
+    if (!success) {
+        throw new Error(`Error from oneping:\n\n${data}`);
+    }
+    return data;
 }
 
 function response_openai(response) {
@@ -225,6 +225,10 @@ const providers = {
         chat_model: 'gemini-2.5-flash',
         embed_model: 'gemini-embedding-exp-03-07',
     },
+    xai: {
+        base_url: 'https://api.x.ai/v1',
+        chat_model: 'grok-4',
+    },
     fireworks: {
         base_url: 'https://api.fireworks.ai/inference/v1',
         model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
@@ -238,7 +242,6 @@ const providers = {
         model: 'deepseek-chat',
     },
 };
-const PROVIDERS = Object.keys(providers);
 
 function get_provider(provider, args) {
     const pdata = provider ? providers[provider] : {};
@@ -290,7 +293,7 @@ function prepare_request(query, args) {
 
     // get generation parameters
     const max_tokens_name = provider.max_tokens_name ?? 'max_completion_tokens';
-    const toks = { [max_tokens_name]: max_tokens ?? DEFAULT_MAX_TOKENS };
+    const toks = { [max_tokens_name]: max_tokens ?? null };
     const predict = prediction ? { prediction } : {};
 
     // convert history to provider format
@@ -329,8 +332,14 @@ async function reply(query, args) {
         throw new Error(`Status ${response.status}: ${JSON.stringify(data)}`);
     }
 
-    // return json data
-    return provider.response(data);
+    // extract text
+    const text = provider.response(data);
+    if (text == null || text.length == 0) {
+        throw new Error(`Empty response from provider: ${JSON.stringify(data)}`);
+    }
+
+    // return text
+    return text;
 }
 
 //
