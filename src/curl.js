@@ -241,6 +241,14 @@ const providers = {
         base_url: 'https://api.deepseek.com',
         model: 'deepseek-chat',
     },
+    cerebras: {
+        base_url: 'https://api.cerebras.ai/v1',
+        model: 'qwen-3-235b-a22b-instruct-2507',
+    },
+    openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: 'qwen/qwen3-235b-a22b-2507',
+    },
 };
 
 function get_provider(provider, args) {
