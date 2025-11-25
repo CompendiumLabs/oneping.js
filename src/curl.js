@@ -67,7 +67,7 @@ function convert_image(image) {
 function content_openai(text, image=null) {
     if (image == null) return text;
     return [
-        { type: 'image_url', image_url: image },
+        { type: 'image_url', image_url: { url: image } },
         { type: 'text', text },
     ];
 }
@@ -95,7 +95,7 @@ function payload_openai(content, args) {
     const { system, history, prefill } = args ?? {};
     let messages = [];
     if (system != null) {
-        messages.push({ role: 'system', content: system });
+        messages.push({ role: 'developer', content: system });
     }
     if (history != null) {
         messages.push(...history);
@@ -105,6 +105,18 @@ function payload_openai(content, args) {
         messages.push({ role: 'assistant', content: prefill });
     }
     let payload = { messages };
+    return payload;
+}
+
+function payload_openai_response(content, args) {
+    const { system, response_id } = args ?? {};
+    let payload = { input: content };
+    if (system != null) {
+        payload.instructions = system;
+    }
+    if (response_id != null) {
+        payload.previous_response_id = response_id;
+    }
     return payload;
 }
 
@@ -151,6 +163,22 @@ function response_openai(response) {
     return response.choices[0].message.content;
 }
 
+function response_openai_response(response) {
+    let text = '';
+    for (const output of response.output) {
+        const { type: output_type } = output;
+        if (output_type == 'message') {
+            for (const content of output.content) {
+                const { type: content_type } = content;
+                if (content_type == 'output_text') {
+                    text += content.text;
+                }
+            }
+        }
+    }
+    return text;
+}
+
 function response_anthropic(response) {
     return response.content[0].text;
 }
@@ -161,6 +189,18 @@ function stream_oneping(chunk) {
 
 function stream_openai(chunk) {
     return chunk.choices[0].delta.content;
+}
+
+function stream_openai_response(chunk) {
+    const { type: response_type, response } = chunk;
+    if (
+        response_type == 'response.created'     ||
+        response_type == 'response.in_progress' ||
+        response_type == 'response.completed'
+    ) {
+        return response_openai_response(response);
+    }
+    return null;
 }
 
 function stream_anthropic(chunk) {
@@ -201,9 +241,18 @@ const providers = {
     },
     openai: {
         base_url: 'https://api.openai.com/v1',
-        chat_model: 'gpt-4o',
+        chat_model: 'gpt-5',
         embed_model: 'text-embedding-3-large',
         transcribe_model: 'gpt-4o-transcribe',
+    },
+    'openai-response': {
+        base_url: 'https://api.openai.com/v1',
+        chat_path: 'responses',
+        chat_model: 'gpt-5',
+        response_key: 'previous_response_id',
+        payload: payload_openai_response,
+        response: response_openai_response,
+        stream: stream_openai_response,
     },
     anthropic: {
         base_url: 'https://api.anthropic.com/v1',
@@ -214,7 +263,7 @@ const providers = {
         payload: payload_anthropic,
         response: response_anthropic,
         stream: stream_anthropic,
-        chat_model: 'claude-3-7-sonnet-latest',
+        chat_model: 'claude-opus-4-1-20250805',
         headers: {
             'anthropic-version': '2023-06-01',
             'anthropic-dangerous-direct-browser-access': 'true',
@@ -277,7 +326,7 @@ function convert_history(history, content_func) {
 function prepare_request(query, args) {
     let {
         provider: pname, system, history, image, prefill, prediction,
-        max_tokens, api_key, stream, ...pargs
+        max_tokens, api_key, response_id, stream, ...pargs
     } = args ?? {};
     pname = pname ?? 'local';
     stream = stream ?? false;
@@ -301,7 +350,7 @@ function prepare_request(query, args) {
 
     // get generation parameters
     const max_tokens_name = provider.max_tokens_name ?? 'max_completion_tokens';
-    const toks = { [max_tokens_name]: max_tokens ?? null };
+    const toks = max_tokens ? { [max_tokens_name]: max_tokens } : {};
     const predict = prediction ? { prediction } : {};
 
     // convert history to provider format
@@ -309,7 +358,7 @@ function prepare_request(query, args) {
 
     // make message payload
     const content = provider.content(query, image);
-    const message = provider.payload(content, { system, history, prefill });
+    const message = provider.payload(content, { system, history, prefill, response_id });
 
     // compose request
     const headers = { 'Content-Type': 'application/json', ...authorize, ...head };
@@ -368,8 +417,8 @@ async function* stream(query, args) {
 
     // check status
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(`Status ${response.status}: ${data.message}`);
+        const { error } = await response.json();
+        throw new Error(`Status ${response.status}: ${error.message}`);
     }
 
     // stream decode and parse
